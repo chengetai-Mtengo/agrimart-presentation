@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 42 25% 97%; --foreground: 140 19% 12%;
+    --card: 0 0% 100%; --card-foreground: 140 19% 12%;
+    --popover: 0 0% 100%; --popover-foreground: 140 19% 12%;
+    --primary: 153 63% 25%; --primary-dark: 153 70% 19%; --primary-light: 144 32% 92%; --primary-foreground: 0 0% 100%;
+    --secondary: 138 17% 94%; --secondary-foreground: 145 24% 20%;
+    --muted: 135 11% 94%; --muted-foreground: 140 6% 43%;
+    --accent: 38 92% 50%; --accent-foreground: 24 10% 10%; --accent-bg: 38 82% 93%;
+    --destructive: 0 72% 51%; --destructive-foreground: 0 0% 100%; --destructive-bg: 0 70% 95%;
+    --border: 135 12% 87%; --input: 135 12% 84%; --ring: 153 63% 25%; --radius: 0.75rem;
+  }
+
+  * { @apply border-border; }
+  html { scroll-behavior: smooth; }
+  body { @apply bg-background text-foreground antialiased; }
+  button, a, input, textarea, select { -webkit-tap-highlight-color: transparent; }
+  ::selection { @apply bg-primary text-primary-foreground; }
+}
+
+@layer utilities {
+  .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+  .scrollbar-none::-webkit-scrollbar { display: none; }
+}
+
+.leaflet-container { width: 100%; height: 100%; font-family: inherit; background: hsl(var(--muted)); }
+.leaflet-popup-content-wrapper { border-radius: var(--radius); box-shadow: 0 10px 30px rgb(0 0 0 / 0.12); }
+.leaflet-popup-content { margin: 14px 16px; }

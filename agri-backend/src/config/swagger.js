@@ -1,0 +1,457 @@
+const swaggerJsdoc = require('swagger-jsdoc');
+const { config } = require('./config');
+
+const swaggerSpec = swaggerJsdoc({
+  definition: {
+    openapi: '3.0.0',
+    info: {
+      title: 'AgriMart API',
+      version: '1.0.0',
+      description:
+        "Production REST API for AgriMart, Zambia's agricultural marketplace connecting " +
+        'farmers and buyers. Backed by PostgreSQL (Supabase). All endpoints return JSON. ' +
+        'Authenticated endpoints require `Authorization: Bearer <token>`, where the token ' +
+        'is issued by `POST /api/auth/login` and is valid for 7 days.\n\n' +
+        '### Map coordinates\n' +
+        'Products and profiles may carry a `latitude`/`longitude` pin (decimal degrees, WGS84 — the ' +
+        'same format returned by the browser Geolocation API and by map libraries like ' +
+        'Leaflet/Google Maps). These are optional on every product write, and are what a ' +
+        'frontend uses to plot farmer locations on a map.\n\n' +
+        '### Field casing\n' +
+        'Most resources (users, products) are returned in camelCase. The one exception is ' +
+        '`/api/notifications`, which returns raw database column names in snake_case ' +
+        '(`email_notifications`, `push_notifications`, `sms_notifications`, ' +
+        '`price_predictions_enabled`) — this is intentional, matching the actual response ' +
+        'shape, not a documentation error.',
+      contact: {
+        name: 'AgriMart',
+      },
+    },
+    servers: [
+      {
+        url: config.apiUrl,
+        description: `${config.env} server`,
+      },
+    ],
+    tags: [
+      { name: 'Health', description: 'Service status and readiness' },
+      { name: 'Auth', description: 'Registration, login, and the current session' },
+      { name: 'Users', description: 'Public profiles and account management' },
+      { name: 'Products', description: 'Marketplace listings, including map coordinates' },
+      { name: 'Saved Products', description: "A buyer's bookmarked listings" },
+      { name: 'Notifications', description: 'Per-account notification preferences' },
+    ],
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+          description: 'Obtain a token from POST /api/auth/login, valid for 7 days.',
+        },
+      },
+      schemas: {
+        Error: {
+          type: 'object',
+          properties: {
+            error: { type: 'string', example: 'Validation failed' },
+            stack: {
+              type: 'string',
+              description: 'Only present when NODE_ENV=development.',
+            },
+          },
+          required: ['error'],
+        },
+        HealthResponse: {
+          type: 'object',
+          properties: {
+            ok: { type: 'boolean', example: true },
+            status: { type: 'string', example: 'ok', enum: ['ok', 'degraded'] },
+            database: { type: 'string', example: 'supabase', enum: ['supabase', 'unavailable'] },
+            timestamp: { type: 'string', format: 'date-time' },
+            uptime: { type: 'integer', description: 'Process uptime in seconds', example: 4213 },
+            environment: { type: 'string', example: 'production' },
+            version: { type: 'string', example: '1.0.0' },
+            memory: {
+              type: 'object',
+              properties: {
+                rss: { type: 'string', example: '78MB' },
+                heapTotal: { type: 'string', example: '42MB' },
+                heapUsed: { type: 'string', example: '31MB' },
+              },
+            },
+          },
+        },
+        Role: {
+          type: 'string',
+          enum: ['farmer', 'consumer'],
+          description: '`farmer` lists produce for sale; `consumer` browses and buys.',
+        },
+        Availability: {
+          type: 'string',
+          enum: ['available', 'limited', 'sold_out', 'hidden'],
+          default: 'available',
+          description:
+            '`hidden` listings are excluded from every public read (list, search, ' +
+            'compare, saved, and even the owner viewing their own supplier filter).',
+        },
+        CategoryId: {
+          type: 'string',
+          enum: [
+            'grains',
+            'vegetables',
+            'fruits',
+            'legumes',
+            'tubers',
+            'dairy',
+            'livestock',
+            'poultry',
+            'fish',
+            'farm-inputs',
+          ],
+          example: 'vegetables',
+          description: 'Matches the seeded `categories` table.',
+        },
+        Category: {
+          type: 'object',
+          required: ['id', 'name'],
+          properties: {
+            id: { type: 'string', example: 'vegetables' },
+            name: { type: 'string', example: 'Vegetables' },
+            icon: { type: 'string', nullable: true, example: '🥬' },
+            description: { type: 'string', nullable: true },
+            color: { type: 'string', nullable: true, example: '#16A34A' },
+          },
+        },
+        RegisterInput: {
+          type: 'object',
+          required: ['username', 'name', 'phone', 'password', 'confirmPassword', 'role'],
+          properties: {
+            username: {
+              type: 'string',
+              minLength: 3,
+              maxLength: 30,
+              pattern: '^[a-zA-Z0-9]+$',
+              example: 'mwansafarm',
+              description: 'Letters and numbers only. This is what you log in with (not email).',
+            },
+            name: { type: 'string', minLength: 2, maxLength: 100, example: 'Mwansa Chanda' },
+            email: {
+              type: 'string',
+              format: 'email',
+              nullable: true,
+              example: 'mwansa@agrimart.zm',
+              description: 'Optional. Not used for login.',
+            },
+            phone: {
+              type: 'string',
+              pattern: '^[0-9]{10,15}$',
+              example: '0971234567',
+              description: '10–15 digits, no country-code symbol.',
+            },
+            password: { type: 'string', minLength: 6, maxLength: 128, example: 'SecurePass123' },
+            confirmPassword: { type: 'string', example: 'SecurePass123' },
+            role: { $ref: '#/components/schemas/Role' },
+            location: { type: 'string', maxLength: 100, example: 'Chongwe' },
+            province: { type: 'string', maxLength: 100, example: 'Lusaka' },
+            latitude: { type: 'number', nullable: true, minimum: -90, maximum: 90, example: -15.4067 },
+            longitude: { type: 'number', nullable: true, minimum: -180, maximum: 180, example: 28.2871 },
+          },
+        },
+        RegisterResponse: {
+          type: 'object',
+          properties: {
+            message: { type: 'string', example: 'Registration successful. Please log in.' },
+          },
+          description: 'Registration does NOT return a token — log in separately afterward.',
+        },
+        LoginInput: {
+          type: 'object',
+          required: ['username', 'password'],
+          properties: {
+            username: {
+              type: 'string',
+              example: 'mwansafarm',
+              description: 'Username or unique account email (field name retained for compatibility).',
+            },
+            password: { type: 'string', example: 'SecurePass123' },
+          },
+        },
+        LoginResponse: {
+          type: 'object',
+          properties: {
+            token: { type: 'string', description: 'JWT, valid 7 days.' },
+            user: { $ref: '#/components/schemas/User' },
+          },
+        },
+        User: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            username: { type: 'string', example: 'mwansafarm' },
+            name: { type: 'string', example: 'Mwansa Chanda' },
+            email: { type: 'string', nullable: true, example: 'mwansa@agrimart.zm' },
+            phone: { type: 'string', example: '0971234567' },
+            role: { $ref: '#/components/schemas/Role' },
+            location: { type: 'string', example: 'Chongwe' },
+            province: { type: 'string', example: 'Lusaka' },
+            latitude: { type: 'number', format: 'double', nullable: true, minimum: -90, maximum: 90 },
+            longitude: { type: 'number', format: 'double', nullable: true, minimum: -180, maximum: 180 },
+            profilePicture: {
+              type: 'string',
+              format: 'uri',
+              nullable: true,
+              example: 'https://.../profiles/1719999999-ab12cd.jpg',
+            },
+            joinedDate: { type: 'string', format: 'date', example: '2026-01-15' },
+            avatarColor: {
+              type: 'string',
+              description: 'Hex color used as the fallback avatar background.',
+              example: '#16A34A',
+            },
+          },
+        },
+        UpdateProfileInput: {
+          type: 'object',
+          description: 'All fields optional; send only what changed. `role` cannot be changed here.',
+          properties: {
+            name: { type: 'string', example: 'Mwansa Chanda' },
+            email: { type: 'string', format: 'email', nullable: true, example: 'mwansa@agrimart.zm' },
+            phone: { type: 'string', example: '0971234567' },
+            location: { type: 'string', example: 'Chongwe' },
+            province: { type: 'string', example: 'Lusaka' },
+            latitude: { type: 'number', nullable: true, minimum: -90, maximum: 90 },
+            longitude: { type: 'number', nullable: true, minimum: -180, maximum: 180 },
+          },
+        },
+        UpdateLocationInput: {
+          type: 'object',
+          description: 'Send at least one field. Latitude and longitude must be supplied together.',
+          properties: {
+            location: { type: 'string', example: 'Chongwe' },
+            province: { type: 'string', example: 'Lusaka' },
+            latitude: { type: 'number', nullable: true, minimum: -90, maximum: 90 },
+            longitude: { type: 'number', nullable: true, minimum: -180, maximum: 180 },
+          },
+        },
+        ChangePasswordInput: {
+          type: 'object',
+          required: ['currentPassword', 'newPassword', 'confirmPassword'],
+          properties: {
+            currentPassword: { type: 'string', example: 'OldPass123' },
+            newPassword: { type: 'string', minLength: 6, example: 'NewPass123' },
+            confirmPassword: { type: 'string', example: 'NewPass123' },
+          },
+        },
+        SuccessResponse: {
+          type: 'object',
+          properties: { success: { type: 'boolean', example: true } },
+        },
+        Product: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            name: { type: 'string', example: 'White Maize' },
+            categoryId: { $ref: '#/components/schemas/CategoryId' },
+            price: { type: 'number', format: 'float', example: 175 },
+            unit: { type: 'string', example: '50kg bag' },
+            quantity: { type: 'integer', example: 200 },
+            description: { type: 'string', example: 'Freshly harvested, well dried.' },
+            imageUrl: { type: 'string', format: 'uri', example: 'https://.../products/xyz.jpg' },
+            supplierId: {
+              type: 'string',
+              format: 'uuid',
+              description: 'Matches a User.id — join against GET /api/users/:id for supplier details.',
+            },
+            location: { type: 'string', example: 'Chongwe' },
+            province: { type: 'string', example: 'Lusaka' },
+            latitude: {
+              type: 'number',
+              format: 'double',
+              nullable: true,
+              minimum: -90,
+              maximum: 90,
+              example: -15.4067,
+              description:
+                'Map pin latitude in decimal degrees (WGS84). Null if this listing has not ' +
+                'been pinned on a map yet.',
+            },
+            longitude: {
+              type: 'number',
+              format: 'double',
+              nullable: true,
+              minimum: -180,
+              maximum: 180,
+              example: 28.2871,
+              description: 'Map pin longitude in decimal degrees (WGS84). Pairs with `latitude`.',
+            },
+            availability: { $ref: '#/components/schemas/Availability' },
+            createdAt: { type: 'string', format: 'date' },
+          },
+        },
+        CreateProductInput: {
+          type: 'object',
+          description:
+            'Sent as multipart/form-data (to allow an optional image file alongside the ' +
+            'fields). All values below arrive as form fields; `image` is the file part.',
+          required: ['name', 'categoryId', 'price', 'unit', 'quantity'],
+          properties: {
+            name: { type: 'string', minLength: 2, maxLength: 100, example: 'White Maize' },
+            categoryId: { $ref: '#/components/schemas/CategoryId' },
+            price: { type: 'number', minimum: 0, example: 175 },
+            unit: { type: 'string', example: '50kg bag' },
+            quantity: { type: 'integer', minimum: 0, example: 200 },
+            description: { type: 'string', maxLength: 2000, example: 'Freshly harvested.' },
+            location: { type: 'string', maxLength: 100, example: 'Chongwe' },
+            province: { type: 'string', maxLength: 100, example: 'Lusaka' },
+            latitude: {
+              type: 'number',
+              minimum: -90,
+              maximum: 90,
+              example: -15.4067,
+              description: 'Optional map pin latitude — drop a pin for this listing.',
+            },
+            longitude: {
+              type: 'number',
+              minimum: -180,
+              maximum: 180,
+              example: 28.2871,
+              description: 'Optional map pin longitude — pairs with `latitude`.',
+            },
+            availability: { $ref: '#/components/schemas/Availability' },
+            image: {
+              type: 'string',
+              format: 'binary',
+              description: 'Optional. jpeg/jpg/png/gif/webp, up to 5MB.',
+            },
+          },
+        },
+        UpdateProductInput: {
+          type: 'object',
+          description:
+            'multipart/form-data, same shape as create but every field is optional — send ' +
+            'only what changed. At least one field is required.',
+          properties: {
+            name: { type: 'string' },
+            categoryId: { $ref: '#/components/schemas/CategoryId' },
+            price: { type: 'number', minimum: 0 },
+            unit: { type: 'string' },
+            quantity: { type: 'integer', minimum: 0 },
+            description: { type: 'string' },
+            location: { type: 'string' },
+            province: { type: 'string' },
+            latitude: { type: 'number', minimum: -90, maximum: 90 },
+            longitude: { type: 'number', minimum: -180, maximum: 180 },
+            availability: { $ref: '#/components/schemas/Availability' },
+            image: { type: 'string', format: 'binary' },
+          },
+        },
+        ComparableProduct: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            name: { type: 'string' },
+            price: { type: 'number' },
+            unit: { type: 'string' },
+            supplierId: { type: 'string', format: 'uuid' },
+            location: { type: 'string' },
+            imageUrl: { type: 'string', format: 'uri' },
+          },
+        },
+        CompareResponse: {
+          type: 'object',
+          properties: {
+            reference: { $ref: '#/components/schemas/Product' },
+            comparable: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/ComparableProduct' },
+              description: 'Up to 20 other listings in the same category, cheapest first.',
+            },
+          },
+        },
+        PricePrediction: {
+          type: 'object',
+          properties: {
+            date: { type: 'string', format: 'date' },
+            predictedPrice: { type: 'number' },
+            confidence: { type: 'integer', description: 'Percent, 70–100.' },
+          },
+        },
+        PredictionsResponse: {
+          type: 'object',
+          properties: {
+            productId: { type: 'string', format: 'uuid' },
+            productName: { type: 'string' },
+            currentPrice: { type: 'number' },
+            predictions: { type: 'array', items: { $ref: '#/components/schemas/PricePrediction' } },
+            model: {
+              type: 'string',
+              example: 'dummy',
+              description: 'Currently a placeholder model — not real forecasting yet.',
+            },
+            generatedAt: { type: 'string', format: 'date-time' },
+          },
+        },
+        SavedToggleResponse: {
+          type: 'object',
+          properties: { saved: { type: 'boolean', example: true } },
+        },
+        NotificationSettings: {
+          type: 'object',
+          description: 'Returned in raw snake_case column names, not camelCase.',
+          properties: {
+            user_id: { type: 'string', format: 'uuid' },
+            email_notifications: { type: 'boolean', example: true },
+            push_notifications: { type: 'boolean', example: true },
+            sms_notifications: { type: 'boolean', example: false },
+            price_predictions_enabled: { type: 'boolean', example: false },
+            updated_at: { type: 'string', format: 'date-time' },
+          },
+        },
+        UpdateNotificationsInput: {
+          type: 'object',
+          description: 'All fields optional; only the ones sent are changed.',
+          properties: {
+            email_notifications: { type: 'boolean' },
+            push_notifications: { type: 'boolean' },
+            sms_notifications: { type: 'boolean' },
+            price_predictions_enabled: {
+              type: 'boolean',
+              description: 'Must be true for a user to call GET /api/products/predictions.',
+            },
+          },
+        },
+      },
+      responses: {
+        ValidationError: {
+          description: 'Request body/query failed validation.',
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
+        },
+        Unauthorized: {
+          description: 'Missing, malformed, or expired bearer token.',
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
+        },
+        Forbidden: {
+          description: 'Authenticated, but not allowed to perform this action.',
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
+        },
+        NotFound: {
+          description: 'No resource matches this id (or it belongs to someone else).',
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
+        },
+        Conflict: {
+          description: 'Username or email already in use.',
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
+        },
+        ServiceUnavailable: {
+          description: 'Database is not ready yet.',
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
+        },
+      },
+    },
+    security: [{ bearerAuth: [] }],
+  },
+  apis: ['./src/app.js', './src/routes/*.js'],
+});
+
+module.exports = swaggerSpec;

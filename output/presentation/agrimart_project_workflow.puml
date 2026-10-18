@@ -1,0 +1,43 @@
+@startuml
+title AgriMart Project Workflow
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Calibri
+skinparam defaultFontSize 16
+skinparam ArrowColor #1F4E79
+skinparam activity {
+  BackgroundColor #EAF4EA
+  BorderColor #2E7D32
+  FontColor #17324D
+  DiamondBackgroundColor #FFF3D6
+  DiamondBorderColor #C98516
+}
+
+start
+:Identify the market-access and\nprice-information problem;
+:Review agricultural marketplaces\nand forecasting studies;
+:Define requirements, users,\nscope and system architecture;
+
+fork
+  :Develop mobile application;
+fork again
+  :Develop web application\nand Express API;
+fork again
+  :Prepare historical price data;
+  :Engineer features and\ntrain the XGBoost model;
+  :Expose forecasts through\nthe FastAPI service;
+end fork
+
+:Integrate mobile, web, Express,\nFastAPI and Supabase components;
+:Run functional, API and\nforecasting tests;
+
+while (Requirements met?) is (No)
+  :Fix defects and refine\nthe affected component;
+  :Repeat integration and testing;
+endwhile (Yes)
+
+:Evaluate results and\ndocument limitations;
+:Deploy and demonstrate\nthe completed AgriMart system;
+stop
+@enduml

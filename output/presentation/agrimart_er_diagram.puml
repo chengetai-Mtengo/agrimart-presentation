@@ -1,0 +1,88 @@
+@startuml
+title AgriMart Core Data Model
+
+left to right direction
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Calibri
+skinparam defaultFontSize 15
+skinparam ArrowColor #1F4E79
+skinparam entity {
+  BackgroundColor #F4F8FB
+  BorderColor #1F4E79
+  FontColor #17324D
+}
+
+entity "profiles" as profiles {
+  * id : UUID <<PK>>
+  --
+  * username : varchar <<UQ>>
+  email : varchar <<UQ>>
+  * password_hash : varchar
+  * name : varchar
+  * phone : varchar
+  * role : farmer | consumer
+  location : varchar
+  province : varchar
+  latitude : decimal
+  longitude : decimal
+}
+
+entity "categories" as categories {
+  * id : varchar <<PK>>
+  --
+  * name : varchar
+  icon : varchar
+  description : text
+  color : varchar
+}
+
+entity "products" as products {
+  * id : UUID <<PK>>
+  --
+  * supplier_id : UUID <<FK>>
+  category_id : varchar <<FK>>
+  * name : varchar
+  * price : decimal
+  * unit : varchar
+  * quantity : integer
+  availability : varchar
+  location : varchar
+  latitude : decimal
+  longitude : decimal
+  image_url : varchar
+  created_at : timestamp
+}
+
+entity "saved_products" as saved_products {
+  * id : UUID <<PK>>
+  --
+  * user_id : UUID <<FK>>
+  * product_id : UUID <<FK>>
+  saved_at : timestamp
+  --
+  UNIQUE(user_id, product_id)
+}
+
+entity "notification_settings" as notification_settings {
+  * user_id : UUID <<PK, FK>>
+  --
+  email_notifications : boolean
+  push_notifications : boolean
+  sms_notifications : boolean
+  price_predictions_enabled : boolean
+  updated_at : timestamp
+}
+
+profiles ||--o{ products : supplies
+categories ||--o{ products : classifies
+profiles ||--o{ saved_products : saves
+products ||--o{ saved_products : is saved in
+profiles ||--o| notification_settings : configures
+
+note bottom of products
+Forecasts are produced by the FastAPI/XGBoost service.
+They are not stored as marketplace transactions.
+end note
+
+@enduml
