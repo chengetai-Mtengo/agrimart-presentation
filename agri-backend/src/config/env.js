@@ -1,8 +1,17 @@
 const path = require('path');
 const dotenv = require('dotenv');
 
-const envPath = path.join(__dirname, '..', '..', '.env');
-const dotenvResult = dotenv.config({ path: envPath });
+const NODE_ENV = process.env.NODE_ENV || 'development';
+
+// Only try to load the .env file if we are NOT in production
+if (NODE_ENV !== 'production') {
+  const envPath = path.join(__dirname, '..', '..', '.env');
+  const dotenvResult = dotenv.config({ path: envPath });
+  
+  if (dotenvResult.error && NODE_ENV !== 'test') {
+    throw new Error(`Unable to load .env from ${envPath}`);
+  }
+}
 
 function requireEnv(name) {
   const value = process.env[name];
@@ -20,11 +29,6 @@ function validateDatabaseUrl(value) {
   return value;
 }
 
-if (dotenvResult.error && process.env.NODE_ENV !== 'test') {
-  throw new Error(`Unable to load .env from ${envPath}`);
-}
-
-const NODE_ENV = process.env.NODE_ENV || 'development';
 const DATABASE_URL = validateDatabaseUrl(requireEnv('DATABASE_URL'));
 const JWT_SECRET = requireEnv('JWT_SECRET');
 
