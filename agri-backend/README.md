@@ -300,6 +300,24 @@ Another process is already using port `5000`. Stop that process or change `PORT`
 
 Check the database password, host, port, network access, and SSL settings. The backend uses SSL automatically for non-local database URLs.
 
+### Images "upload" but never appear in production
+
+Uploads only persist when Supabase Storage is configured (`SUPABASE_URL` +
+`SUPABASE_SERVICE_ROLE_KEY`). Typical symptoms:
+
+- **Upload reports success on Render but the image is gone**: without those
+  variables the backend used to write to Render's ephemeral disk and store a
+  `localhost` URL. It now fails with a 500 naming the missing variables instead
+  of pretending the upload worked. Set both in the Render dashboard.
+- **500 saying the bucket is private**: make the `product-images` and
+  `profile-pictures` buckets public (Supabase dashboard → Storage → bucket →
+  Settings → Public bucket). A private bucket accepts uploads but its public
+  object URLs always fail, so every image would 403.
+- **Images load locally but not from the deployed frontend**: uploaded assets
+  are served with `Cross-Origin-Resource-Policy: cross-origin` so browsers on
+  another origin (the frontend's domain) can render them. Helmet's default
+  `same-origin` blocks those images after a successful 200 response.
+
 # Backend fixes: rate limit + tight price comparison
 
 Two drop-in file replacements for your `agri-backend` repo.
