@@ -15,9 +15,14 @@ const { errorHandler } = require('./middleware/errorHandler');
 
 const app = express();
 
+app.set('trust proxy', 1);
 app.disable('x-powered-by');
 app.use(helmet());
 app.use(compression());
+
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', service: 'agrimart-backend' });
+});
 
 const corsOrigin = config.allowedOrigins === '*'
   ? true

@@ -25,7 +25,7 @@ async function uploadFile(bucketName, folder, fileBuffer, mimeType, fileName = '
 
     if (error) {
       console.error('Supabase upload error:', error);
-      throw new Error('Failed to upload file');
+      throw new Error(`Failed to upload file to Supabase: ${error.message || 'Unknown error'}`);
     }
 
     const { data: publicUrlData } = supabase.storage
